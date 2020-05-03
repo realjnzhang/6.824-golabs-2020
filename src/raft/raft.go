@@ -17,14 +17,17 @@ package raft
 //   in the same server.
 //
 
-import "sync"
-import "sync/atomic"
-import "../labrpc"
+import (
+	"bytes"
+	"sync"
+	"sync/atomic"
+
+	"../labgob"
+	"../labrpc"
+)
 
 // import "bytes"
 // import "../labgob"
-
-
 
 //
 // as each Raft peer becomes aware that successive log entries are
@@ -57,6 +60,18 @@ type Raft struct {
 	// Look at the paper's Figure 2 for a description of what
 	// state a Raft server must maintain.
 
+	// persistent
+	CurrentTerm int
+	VoteFor     int
+	Logs        []interface{}
+
+	// volatile
+	commitIndex int
+	lastApplied int
+
+	// volatile leader
+	nextIndex  []int
+	matchIndex []int
 }
 
 // return currentTerm and whether this server
@@ -83,8 +98,16 @@ func (rf *Raft) persist() {
 	// e.Encode(rf.yyy)
 	// data := w.Bytes()
 	// rf.persister.SaveRaftState(data)
-}
 
+	w := new(bytes.Buffer)
+	e := labgob.NewEncoder(w)
+	e.Encode(rf.CurrentTerm)
+	e.Encode(rf.VoteFor)
+	e.Encode(rf.Logs)
+	data := w.Bytes()
+	rf.persister.SaveRaftState(data)
+	return
+}
 
 //
 // restore previously persisted state.
@@ -106,10 +129,22 @@ func (rf *Raft) readPersist(data []byte) {
 	//   rf.xxx = xxx
 	//   rf.yyy = yyy
 	// }
+	r := bytes.NewBuffer(data)
+	d := labgob.NewDecoder(r)
+	var currentTerm int
+	var voteFor int
+	var logs []interface
+	if d.Decode(&currentTerm) == nil {
+		rf.CurrentTerm = currentTerm
+	}
+	if d.Decode(&voteFor) == nil {
+		rf.VoteFor = voteFor
+	}
+	if d.Decode(&logs) == nil {
+		rf.Logs = logs
+	}
+	return
 }
-
-
-
 
 //
 // example RequestVote RPC arguments structure.
@@ -168,7 +203,6 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 	return ok
 }
 
-
 //
 // the service using Raft (e.g. a k/v server) wants to start
 // agreement on the next command to be appended to Raft's log. if this
@@ -189,7 +223,6 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	isLeader := true
 
 	// Your code here (2B).
-
 
 	return index, term, isLeader
 }
@@ -237,7 +270,6 @@ func Make(peers []*labrpc.ClientEnd, me int,
 
 	// initialize from state persisted before a crash
 	rf.readPersist(persister.ReadRaftState())
-
 
 	return rf
 }
