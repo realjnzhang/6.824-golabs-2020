@@ -1,0 +1,105 @@
+warning: only one CPU, which may conceal locking bugs
+2020/05/04 18:57:33 server[0] try read persist data=[[]]
+2020/05/04 18:57:33 peer[0] new electionTimeout after 600 milli
+2020/05/04 18:57:33 server[1] try read persist data=[[]]
+2020/05/04 18:57:33 peer[1] new electionTimeout after 600 milli
+2020/05/04 18:57:33 server[2] try read persist data=[[]]
+2020/05/04 18:57:33 peer[2] new electionTimeout after 600 milli
+Test (2A): initial election ...
+2020/05/04 18:57:33 server[0] state[currentTerm=0 isLeader=false]
+2020/05/04 18:57:33 server[1] state[currentTerm=0 isLeader=false]
+2020/05/04 18:57:33 server[2] state[currentTerm=0 isLeader=false]
+2020/05/04 18:57:34 server[2] start election routine at term [1] 2
+2020/05/04 18:57:34 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[2] send args[term=1 candidate=2 lastIndex=0 lastTerm=0] to peer[0]
+2020/05/04 18:57:34 peer[0] get vote request from server[2]-outlock
+2020/05/04 18:57:34 server[2] get vote from peer[0]
+2020/05/04 18:57:34 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[2] receive reply[term=1 grant=true] from peer[0]
+2020/05/04 18:57:34 server[2] send args[term=1 candidate=2 lastIndex=0 lastTerm=0] to peer[1]
+2020/05/04 18:57:34 peer[1] get vote request from server[2]-outlock
+2020/05/04 18:57:34 server[2] get vote from peer[1]
+2020/05/04 18:57:34 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[2] receive reply[term=1 grant=true] from peer[1]
+2020/05/04 18:57:34 server[2] becomes leader{next=[1 1 1], match=[0 0 0]}
+2020/05/04 18:57:34 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[0] state[currentTerm=1 isLeader=false]
+2020/05/04 18:57:34 server[1] state[currentTerm=1 isLeader=false]
+2020/05/04 18:57:34 server[2] state[currentTerm=1 isLeader=true]
+2020/05/04 18:57:34 server[0] state[currentTerm=1 isLeader=false]
+2020/05/04 18:57:34 server[1] state[currentTerm=1 isLeader=false]
+2020/05/04 18:57:34 server[2] state[currentTerm=1 isLeader=true]
+2020/05/04 18:57:34 server[1] start election routine at term [2] 2
+2020/05/04 18:57:34 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[1] send args[term=2 candidate=1 lastIndex=0 lastTerm=0] to peer[0]
+2020/05/04 18:57:34 peer[0] get vote request from server[1]-outlock
+2020/05/04 18:57:34 server[1] get vote from peer[0]
+2020/05/04 18:57:34 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[1] receive reply[term=2 grant=true] from peer[0]
+2020/05/04 18:57:34 server[1] send args[term=2 candidate=1 lastIndex=0 lastTerm=0] to peer[2]
+2020/05/04 18:57:34 peer[2] get vote request from server[1]-outlock
+2020/05/04 18:57:34 server[1] get vote from peer[2]
+2020/05/04 18:57:34 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[1] receive reply[term=2 grant=true] from peer[2]
+2020/05/04 18:57:34 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:34 server[1] becomes leader{next=[1 1 1], match=[0 0 0]}
+2020/05/04 18:57:35 server[0] start election routine at term [3] 2
+2020/05/04 18:57:35 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[0] send args[term=3 candidate=0 lastIndex=0 lastTerm=0] to peer[1]
+2020/05/04 18:57:35 peer[1] get vote request from server[0]-outlock
+2020/05/04 18:57:35 server[0] get vote from peer[1]
+2020/05/04 18:57:35 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[0] receive reply[term=3 grant=true] from peer[1]
+2020/05/04 18:57:35 server[0] send args[term=3 candidate=0 lastIndex=0 lastTerm=0] to peer[2]
+2020/05/04 18:57:35 peer[2] get vote request from server[0]-outlock
+2020/05/04 18:57:35 server[0] get vote from peer[2]
+2020/05/04 18:57:35 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[0] receive reply[term=3 grant=true] from peer[2]
+2020/05/04 18:57:35 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[0] becomes leader{next=[1 1 1], match=[0 0 0]}
+2020/05/04 18:57:35 server[2] start election routine at term [4] 2
+2020/05/04 18:57:35 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[2] send args[term=4 candidate=2 lastIndex=0 lastTerm=0] to peer[0]
+2020/05/04 18:57:35 peer[0] get vote request from server[2]-outlock
+2020/05/04 18:57:35 server[2] get vote from peer[0]
+2020/05/04 18:57:35 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[2] receive reply[term=4 grant=true] from peer[0]
+2020/05/04 18:57:35 server[2] send args[term=4 candidate=2 lastIndex=0 lastTerm=0] to peer[1]
+2020/05/04 18:57:35 peer[1] get vote request from server[2]-outlock
+2020/05/04 18:57:35 server[2] get vote from peer[1]
+2020/05/04 18:57:35 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:35 server[2] receive reply[term=4 grant=true] from peer[1]
+2020/05/04 18:57:35 server[2] becomes leader{next=[1 1 1], match=[0 0 0]}
+2020/05/04 18:57:35 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:36 server[0] state[currentTerm=4 isLeader=false]
+2020/05/04 18:57:36 server[1] state[currentTerm=4 isLeader=false]
+2020/05/04 18:57:36 server[2] state[currentTerm=4 isLeader=true]
+warning: term changed even though there were no failures2020/05/04 18:57:36 server[1] start election routine at term [5] 2
+2020/05/04 18:57:36 peer[1] reset electionTimeout after 600 milli
+2020/05/04 18:57:36 server[1] send args[term=5 candidate=1 lastIndex=0 lastTerm=0] to peer[0]
+2020/05/04 18:57:36 peer[0] get vote request from server[1]-outlock
+2020/05/04 18:57:36 server[1] get vote from peer[0]
+2020/05/04 18:57:36 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:36 server[1] receive reply[term=5 grant=true] from peer[0]
+2020/05/04 18:57:36 server[1] send args[term=5 candidate=1 lastIndex=0 lastTerm=0] to peer[2]
+2020/05/04 18:57:36 peer[2] get vote request from server[1]-outlock
+2020/05/04 18:57:36 server[1] get vote from peer[2]
+2020/05/04 18:57:36 peer[2] reset electionTimeout after 600 milli
+2020/05/04 18:57:36 server[1] receive reply[term=5 grant=true] from peer[2]
+2020/05/04 18:57:36 server[1] becomes leader{next=[1 1 1], match=[0 0 0]}
+2020/05/04 18:57:36 peer[0] reset electionTimeout after 600 milli
+2020/05/04 18:57:36 server[0] state[currentTerm=5 isLeader=false]
+2020/05/04 18:57:36 server[1] state[currentTerm=5 isLeader=true]
+2020/05/04 18:57:36 server[2] state[currentTerm=5 isLeader=false]
+  ... Passed --   3.6  3   10    1596    0
+2020/05/04 18:57:36 kill server[0]
+2020/05/04 18:57:36 kill server[1]
+2020/05/04 18:57:36 kill server[2]
+2020/05/04 18:57:36 server[0] try read persist data=[[]]
+2020/05/04 18:57:36 peer[0] new electionTimeout after 600 milli
+2020/05/04 18:57:36 server[1] try read persist data=[[]]
+2020/05/04 18:57:36 peer[1] new electionTimeout after 600 milli
+2020/05/04 18:57:36 server[2] try read persist data=[[]]
+2020/05/04 18:57:36 peer[2] new electionTimeout after 600 milli
+Test (2A): election after network failure ...
