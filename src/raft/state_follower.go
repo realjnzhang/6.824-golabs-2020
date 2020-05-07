@@ -22,7 +22,8 @@ func (f *RaftFollower) HandleAE(context RaftContext, args *AppendEntriesArgs, re
 
 	// append
 	generalAppendEntries(context, args, reply)
-	// TODO: Apply
+	// Apply commit
+	applyCommitLog(context)
 }
 
 func (*RaftFollower) HandleRV(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -31,7 +32,7 @@ func (*RaftFollower) HandleRV(context RaftContext, args *RequestVoteArgs, reply 
 }
 
 func (*RaftFollower) HandleCommand(context RaftContext, command interface{}) (int, int, bool) {
-
+	return 0, 0, false
 }
 
 func (f *RaftFollower) TimeoutHeartbeat(context RaftContext, t time.Time) {
@@ -127,4 +128,9 @@ func generalAppendEntries(context RaftContext, args *AppendEntriesArgs, reply *A
 	reply.Success = true
 	reply.Term = persistData.CurrentTerm
 	return
+}
+
+// if commitIndex > lastApplied  apply log
+func applyCommitLog(context RaftContext) {
+
 }

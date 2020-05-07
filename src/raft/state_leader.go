@@ -25,11 +25,16 @@ func (l *RaftLeader) HandleAE(context RaftContext, args *AppendEntriesArgs, repl
 	defer persistData.Persist()
 	if args.Term > persistData.CurrentTerm {
 		persistData.CurrentTerm = args.Term
+		persistData.VotedFor = nil
 		context.TransferToFollower()
 		// go: prevent dead lock
 		go generalAppendEntries(context, args, reply)
+		go applyCommitLog(context)
 	}
-	// TODO: apply
+	// else: leader can't receive AE request where Term = CurrentTerm?
+	reply.Success = false
+	reply.Term = persistData.CurrentTerm
+	return
 }
 
 func (*RaftLeader) HandleRV(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -43,7 +48,7 @@ func (*RaftLeader) HandleRV(context RaftContext, args *RequestVoteArgs, reply *R
 }
 
 func (*RaftLeader) HandleCommand(context RaftContext, command interface{}) (int, int, bool) {
-
+	return 0, 0, false
 }
 
 func (*RaftLeader) TimeoutHeartbeat(context RaftContext, t time.Time) {

@@ -108,7 +108,7 @@ type ApplyMsg struct {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
-	rf.currentState.HandleCommand(rf, command)
+	return rf.currentState.HandleCommand(rf, command)
 }
 
 //

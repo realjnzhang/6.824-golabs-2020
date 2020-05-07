@@ -27,7 +27,11 @@ func NewPersistData(p *Persister) *PersistData {
 	}
 
 	if e := d.Decode(&voteFor); e != nil {
-		ret.VotedFor = &voteFor
+		if voteFor == -1 {
+			ret.VotedFor = nil
+		} else {
+			ret.VotedFor = &voteFor
+		}
 	} else {
 		panic(e)
 	}

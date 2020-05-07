@@ -32,8 +32,19 @@ func (c *RaftCandidate) InitTransfer(context RaftContext) {
 
 func (*RaftCandidate) HandleAE(context RaftContext, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	// check term if need to transfer to follower
+	persistData := context.GetPersistData()
+	persistData.Lock()
+	defer persistData.Unlock()
+	defer persistData.Persist()
 
+	if args.Term > persistData.CurrentTerm {
+		persistData.VotedFor = nil
+		persistData.CurrentTerm = args.Term
+		context.TransferToFollower()
+	}
+	go generalAppendEntries(context, args, reply)
 	// TODO: apply
+	go applyCommitLog(context)
 }
 
 func (*RaftCandidate) HandleRV(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -42,7 +53,7 @@ func (*RaftCandidate) HandleRV(context RaftContext, args *RequestVoteArgs, reply
 }
 
 func (*RaftCandidate) HandleCommand(context RaftContext, command interface{}) (int, int, bool) {
-
+	return 0, 0, false
 }
 
 func (*RaftCandidate) TimeoutHeartbeat(context RaftContext, t time.Time) {
@@ -50,6 +61,8 @@ func (*RaftCandidate) TimeoutHeartbeat(context RaftContext, t time.Time) {
 }
 
 func (c *RaftCandidate) TimeoutElection(context RaftContext, t time.Time) {
+	r := time.Duration(rand.Float64() * electionTimeout)
+	time.Sleep(r * time.Millisecond)
 	// new round election
 	res := make(chan bool)
 	c.startElection(context, res)
@@ -68,6 +81,8 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 	var args RequestVoteArgs
 
 	persistData.Lock()
+	defer persistData.Unlock()
+	defer persistData.Persist()
 	// update persist
 	persistData.CurrentTerm = persistData.CurrentTerm + 1
 	me := context.Me()
@@ -79,15 +94,9 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 	args.LastLogIndex = len(persistData.Log) - 1
 	args.LastLogTerm = persistData.Log[args.LastLogIndex].Term
 
-	// persist
-	persistData.Persist()
-	persistData.Unlock()
-
 	voteCount := int32(1)
 	finished := int32(0)
 
-	persistData.RLock()
-	defer persistData.RUnlock()
 	for peer := 0; peer < context.Peers(); peer++ {
 		if peer == context.Me() {
 			continue
@@ -96,8 +105,10 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 			var reply RequestVoteReply
 			if context.SendRequestVote(p, &args, &reply) {
 				if reply.Term > persistData.CurrentTerm {
+					persistData.CurrentTerm = reply.Term
+					persistData.VotedFor = nil
 					context.TransferToFollower()
-					atomic.AddInt32(&voteCount, -1*int32(context.Peers())) // impossible to be elected
+					atomic.AddInt32(&voteCount, -1*int32(context.Peers())) // impossible to be elected, not necessary
 					return
 				}
 				if reply.VoteGranted {
