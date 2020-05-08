@@ -118,3 +118,69 @@ func (rf *Raft) electionSignalBridge() {
 		}
 	}
 }
+
+// RPCs
+
+//
+// example RequestVote RPC arguments structure.
+// field names must start with capital letters!
+//
+type RequestVoteArgs struct {
+	Term         int
+	CandidateId  int
+	LastLogIndex int
+	LastLogTerm  int
+}
+
+//
+// example RequestVote RPC reply structure.
+// field names must start with capital letters!
+//
+type RequestVoteReply struct {
+	Term        int
+	VoteGranted bool
+}
+
+//
+// example RequestVote RPC handler.
+//
+func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
+	if rf.currentState == nil {
+		rf.persistData.RLock()
+		defer rf.persistData.RUnlock()
+		reply.Term = rf.persistData.CurrentTerm
+		reply.VoteGranted = false
+		return
+	}
+	rf.currentState.HandleRV(rf, args, reply)
+}
+
+type LogEntry struct {
+	Term    int
+	Command interface{}
+}
+
+type AppendEntriesArgs struct {
+	Term         int
+	LeaderId     int
+	PrevLogIndex int
+	PrevLogTerm  int
+	Entries      []LogEntry
+	LeaderCommit int
+}
+
+type AppendEntriesReply struct {
+	Term    int
+	Success bool
+}
+
+func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	if rf.currentState == nil {
+		rf.persistData.RLock()
+		defer rf.persistData.RUnlock()
+		reply.Success = false
+		reply.Term = rf.persistData.CurrentTerm
+		return
+	}
+	rf.currentState.HandleAE(rf, args, reply)
+}

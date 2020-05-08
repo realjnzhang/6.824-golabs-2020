@@ -10,6 +10,7 @@ type RaftContext interface {
 	Peers() int
 	Me() int
 	SendRequestVote(int, *RequestVoteArgs, *RequestVoteReply) bool
+	SendAppendEntries(int, *AppendEntriesArgs, *AppendEntriesReply) bool
 	Kill()
 	Killed() <-chan bool
 	GetVolatileData() *VolatileData
@@ -73,6 +74,11 @@ func (rf *Raft) GetPersistData() *PersistData {
 //
 func (rf *Raft) SendRequestVote(server int, args *RequestVoteArgs, reply *RequestVoteReply) bool {
 	ok := rf.peers[server].Call("Raft.RequestVote", args, reply)
+	return ok
+}
+
+func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *AppendEntriesReply) bool {
+	ok := rf.peers[server].Call("Raft.AppendEntries", args, reply)
 	return ok
 }
 

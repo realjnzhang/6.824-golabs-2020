@@ -6,10 +6,13 @@ import (
 	"sync"
 )
 
+// Lock priority: persist > all volatile > leader volatile
+
 func NewPersistData(p *Persister) *PersistData {
 	ret := new(PersistData)
 	ret.Log = append(ret.Log, LogEntry{})
 	ret.persister = p
+	ret.persistLock = new(sync.RWMutex)
 	data := p.ReadRaftState()
 	if data == nil || len(data) < 1 { // bootstrap without any state?
 		return ret
@@ -46,7 +49,7 @@ func NewPersistData(p *Persister) *PersistData {
 
 type PersistData struct {
 	persister   *Persister
-	persistLock sync.RWMutex
+	persistLock *sync.RWMutex
 	CurrentTerm int
 	VotedFor    *int
 	Log         []LogEntry
@@ -83,11 +86,13 @@ func (p *PersistData) Persist() {
 }
 
 func NewVolatileData() *VolatileData {
-	return new(VolatileData)
+	ret := new(VolatileData)
+	ret.volatileLock = new(sync.RWMutex)
+	return ret
 }
 
 type VolatileData struct {
-	volatileLock sync.RWMutex
+	volatileLock *sync.RWMutex
 	CommitIndex  int
 	LastApplied  int
 }
