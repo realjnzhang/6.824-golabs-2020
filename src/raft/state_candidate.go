@@ -16,15 +16,25 @@ type RaftCandidate struct {
 
 func (c *RaftCandidate) InitTransfer(context RaftContext) {
 	c.preHeartBeat = time.Now().UnixNano()
+	persistData := context.GetPersistData()
+	lockRound := rand.Int()
+	persistData.RLock(context.Me(), lockRound)
+	termSnapshot := persistData.CurrentTerm
+	persistData.RUnlock(context.Me(), lockRound)
 	// when first comes to candidate, start an election
-	r := time.Duration(rand.Float64() * electionTimeout)
+	// r := time.Duration(rand.Float64() * electionTimeout)
+	r := time.Duration(context.Me() * electionTimeout)
 	time.Sleep(r * time.Millisecond)
 	res := make(chan bool)
-	c.startElection(context, res)
+	go c.startElection(context, res, termSnapshot)
 	select {
 	case elected := <-res:
+		DPrintf("CANDIDATE[%v] got election result[%v]", context.Me(), elected)
 		if elected {
+			DPrintf("CANDIDATE[%v] is elected and transfer to LEADER", context.Me())
 			context.TransferToLeader()
+		} else {
+			DPrintf("CANDIDATE[%v] is not elected", context.Me())
 		}
 		// else do nothing, still in candidate
 	}
@@ -33,18 +43,21 @@ func (c *RaftCandidate) InitTransfer(context RaftContext) {
 func (*RaftCandidate) HandleAE(context RaftContext, args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	// check term if need to transfer to follower
 	persistData := context.GetPersistData()
-	persistData.Lock()
-	defer persistData.Unlock()
-	defer persistData.Persist()
+	lockRound := rand.Int()
+	persistData.Lock(context.Me(), lockRound)
 
 	if args.Term > persistData.CurrentTerm {
+		DPrintf("CANDIDATE[%v] receive AE[term=%v] > currentTerm=%v, transfer to Follower", context.Me(), args.Term, persistData.CurrentTerm)
 		persistData.VotedFor = nil
 		persistData.CurrentTerm = args.Term
 		context.TransferToFollower()
 	}
-	go generalAppendEntries(context, args, reply)
+	persistData.Persist()
+	persistData.Unlock(context.Me(), lockRound)
+	generalAppendEntries(context, args, reply)
 	// TODO: apply
-	go applyCommitLog(context)
+	applyCommitLog(context)
+	DPrintf("peer[%v] reply appendAntries[leader=%v term=%v] {%v}", context.Me(), args.LeaderId, args.Term, *reply)
 }
 
 func (*RaftCandidate) HandleRV(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -61,29 +74,41 @@ func (*RaftCandidate) TimeoutHeartbeat(context RaftContext, t time.Time) {
 }
 
 func (c *RaftCandidate) TimeoutElection(context RaftContext, t time.Time) {
+	persistData := context.GetPersistData()
+	lockRound := rand.Int()
+	persistData.RLock(context.Me(), lockRound)
+	termSnapshot := persistData.CurrentTerm
+	persistData.RUnlock(context.Me(), lockRound)
 	r := time.Duration(rand.Float64() * electionTimeout)
 	time.Sleep(r * time.Millisecond)
 	// new round election
+	DPrintf("CANDIDATE[%v] start new round election", context.Me())
 	res := make(chan bool)
-	c.startElection(context, res)
+	go c.startElection(context, res, termSnapshot)
 	select {
 	case elected := <-res:
 		if elected {
+			DPrintf("CANDIDATE[%v] is elected and transfer to LEADER", context.Me())
 			context.TransferToLeader()
+		} else {
+			DPrintf("CANDIDATE[%v] is not elected", context.Me())
 		}
 		// else do nothing, still in candidate
 	}
 }
 
 // private function
-func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
+func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool, termSnapshot int) {
 	persistData := context.GetPersistData()
 	var args RequestVoteArgs
-
-	persistData.Lock()
-	defer persistData.Unlock()
-	defer persistData.Persist()
+	lockRound := rand.Int()
+	persistData.Lock(context.Me(), lockRound)
 	// update persist
+	if persistData.CurrentTerm > termSnapshot { // already finished one round election
+		persistData.Unlock(context.Me(), lockRound)
+		ret <- false
+		return
+	}
 	persistData.CurrentTerm = persistData.CurrentTerm + 1
 	me := context.Me()
 	persistData.VotedFor = &me
@@ -93,6 +118,8 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 	args.CandidateId = me
 	args.LastLogIndex = len(persistData.Log) - 1
 	args.LastLogTerm = persistData.Log[args.LastLogIndex].Term
+	persistData.Persist()
+	persistData.Unlock(context.Me(), lockRound)
 
 	voteCount := int32(1)
 	finished := int32(0)
@@ -103,10 +130,16 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 		}
 		go func(p int) {
 			var reply RequestVoteReply
+			DPrintf("CANDIDATE[%v] send RV arg[term=%v candidateId=%v lastLogIndex=%v lastLogTerm=%v] to peer[%v]", context.Me(), args.Term, args.CandidateId, args.LastLogIndex, args.LastLogTerm, p)
 			if context.SendRequestVote(p, &args, &reply) {
+				DPrintf("CANDIDATE[%v] got RV reply[term=%v grant=%v] from pees[%v]", context.Me(), reply.Term, reply.VoteGranted, p)
 				if reply.Term > persistData.CurrentTerm {
+					lockRound = rand.Int()
+					persistData.Lock(context.Me(), lockRound)
 					persistData.CurrentTerm = reply.Term
 					persistData.VotedFor = nil
+					persistData.Persist()
+					persistData.Unlock(context.Me(), lockRound)
 					context.TransferToFollower()
 					atomic.AddInt32(&voteCount, -1*int32(context.Peers())) // impossible to be elected, not necessary
 					return
@@ -124,6 +157,9 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 		for {
 			select {
 			case <-voteCounterTicker.C:
+				if context.Killed() {
+					return
+				}
 				vc := atomic.LoadInt32(&voteCount)
 				fin := atomic.LoadInt32(&finished)
 				if int(vc)*2 > context.Peers() {
@@ -131,13 +167,6 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool) {
 					return
 				}
 				if int(fin) >= context.Peers() {
-					ret <- false
-					return
-				}
-			case k := <-context.Killed():
-				if k { // killed
-					voteCounterTicker.Stop()
-					context.Kill()
 					ret <- false
 					return
 				}

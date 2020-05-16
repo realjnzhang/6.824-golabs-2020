@@ -3,6 +3,7 @@ package raft
 import (
 	"bytes"
 	"golabs/labgob"
+	"runtime"
 	"sync"
 )
 
@@ -55,23 +56,33 @@ type PersistData struct {
 	Log         []LogEntry
 }
 
-func (p *PersistData) Lock() {
+func (p *PersistData) Lock(who int, round int) {
+	_, file, line, _ := runtime.Caller(1)
+	DPrintf("\t\t--[%v] try lock persistData in round [%v] at [%v:%v]--", who, round, file, line)
 	p.persistLock.Lock()
+	DPrintf("\t\t--[%v] lock persistData succ in round [%v] at [%v:%v]--", who, round, file, line)
 }
 
-func (p *PersistData) Unlock() {
+func (p *PersistData) Unlock(who int, round int) {
+	_, file, line, _ := runtime.Caller(1)
 	p.persistLock.Unlock()
+	DPrintf("\t\t--[%v] unlock persistData in round [%v] at [%v:%v]--", who, round, file, line)
 }
 
-func (p *PersistData) RLock() {
+func (p *PersistData) RLock(who int, round int) {
+	_, file, line, _ := runtime.Caller(1)
+	DPrintf("\t\t--[%v] try rlock persistData in round [%v] at [%v:%v]--", who, round, file, line)
 	p.persistLock.RLock()
+	DPrintf("\t\t--[%v] rlock persistData succ in round [%v] at [%v:%v]--", who, round, file, line)
 }
 
-func (p *PersistData) RUnlock() {
+func (p *PersistData) RUnlock(who int, round int) {
+	_, file, line, _ := runtime.Caller(1)
 	p.persistLock.RUnlock()
+	DPrintf("\t\t--[%v] runlock persistData in round [%v] at [%v:%v]--", who, round, file, line)
 }
 
-func (p *PersistData) Persist() {
+func (p *PersistData) RealPersist() {
 	w := new(bytes.Buffer)
 	e := labgob.NewEncoder(w)
 	e.Encode(p.CurrentTerm)
@@ -83,6 +94,10 @@ func (p *PersistData) Persist() {
 	e.Encode(p.Log)
 	data := w.Bytes()
 	p.persister.SaveRaftState(data)
+}
+
+func (p *PersistData) Persist() {
+
 }
 
 func NewVolatileData() *VolatileData {

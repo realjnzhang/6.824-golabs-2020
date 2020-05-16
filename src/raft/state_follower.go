@@ -1,6 +1,7 @@
 package raft
 
 import (
+	"math/rand"
 	"time"
 )
 
@@ -24,6 +25,7 @@ func (f *RaftFollower) HandleAE(context RaftContext, args *AppendEntriesArgs, re
 	generalAppendEntries(context, args, reply)
 	// Apply commit
 	applyCommitLog(context)
+	DPrintf("peer[%v] reply appendAntries[leader=%v term=%v] {%v}", context.Me(), args.LeaderId, args.Term, *reply)
 }
 
 func (*RaftFollower) HandleRV(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
@@ -47,13 +49,15 @@ func (f *RaftFollower) TimeoutElection(context RaftContext, t time.Time) {
 		return
 	}
 	// change to candidate
+	DPrintf("peer[%v] transfer to CANDIDATE from FOLLOWER", context.Me())
 	context.TransferToCandidate()
 }
 
 func generalRequestVote(context RaftContext, args *RequestVoteArgs, reply *RequestVoteReply) {
 	persistData := context.GetPersistData()
-	persistData.Lock()
-	defer persistData.Unlock()
+	lockRound := rand.Int()
+	persistData.Lock(context.Me(), lockRound)
+	defer persistData.Unlock(context.Me(), lockRound)
 	defer persistData.Persist()
 	if args.Term < persistData.CurrentTerm {
 		reply.Term = persistData.CurrentTerm
@@ -86,20 +90,23 @@ func generalRequestVote(context RaftContext, args *RequestVoteArgs, reply *Reque
 }
 
 func generalAppendEntries(context RaftContext, args *AppendEntriesArgs, reply *AppendEntriesReply) {
+	DPrintf("Peer[%v] got AE from LEADER[%v] args[term=%v prevLogIdx=%v prevLogTerm=%v leaderCommit=%v]", context.Me(), args.LeaderId, args.Term, args.PrevLogIndex, args.PrevLogTerm, args.LeaderCommit)
 	persistData := context.GetPersistData()
-	persistData.Lock()
-	defer persistData.Unlock()
-	defer persistData.Persist()
-
+	lockRound := rand.Int()
+	persistData.RLock(context.Me(), lockRound)
 	if args.Term < persistData.CurrentTerm {
 		reply.Success = false
 		reply.Term = persistData.CurrentTerm
+		DPrintf("Peer[%v] reject AE from LEADER[%v] because of argsTerm[%v] < currentTerm[%v]", context.Me(), args.LeaderId, args.Term, persistData.CurrentTerm)
+		persistData.RUnlock(context.Me(), lockRound)
 		return
 	}
 
 	if args.PrevLogIndex >= len(persistData.Log) {
 		reply.Success = false
 		reply.Term = persistData.CurrentTerm
+		DPrintf("Peer[%v] reject AE from LEADER[%v] because of argsPrevIndex[%v] >= lenLog[%v]", context.Me(), args.LeaderId, args.PrevLogIndex, len(persistData.Log))
+		persistData.RUnlock(context.Me(), lockRound)
 		return
 	}
 
@@ -107,9 +114,16 @@ func generalAppendEntries(context RaftContext, args *AppendEntriesArgs, reply *A
 	if perLogEntry.Term != args.PrevLogTerm {
 		reply.Success = false
 		reply.Term = persistData.CurrentTerm
+		DPrintf("Peer[%v] reject AE from LEADER[%v] because of argsPrevTerm[%v] != logPrevTerm[%v]", context.Me(), args.LeaderId, args.PrevLogTerm, perLogEntry.Term)
+		persistData.RUnlock(context.Me(), lockRound)
 		return
 	}
+	persistData.RUnlock(context.Me(), lockRound)
 
+	lockRound = rand.Int()
+	persistData.Lock(context.Me(), lockRound)
+	defer persistData.Unlock(context.Me(), lockRound)
+	defer persistData.Persist()
 	// append log
 	log := persistData.Log[:args.PrevLogIndex+1]
 	persistData.Log = append(log, args.Entries...)
@@ -124,7 +138,7 @@ func generalAppendEntries(context RaftContext, args *AppendEntriesArgs, reply *A
 			volatileData.CommitIndex = len(persistData.Log) - 1
 		}
 	}
-
+	DPrintf("Peer[%v] accept AE from LEADER[%v] args[term=%v prevLogIdx=%v prevLogTerm=%v leaderCommit=%v]", context.Me(), args.LeaderId, args.Term, args.PrevLogIndex, args.PrevLogTerm, args.LeaderCommit)
 	reply.Success = true
 	reply.Term = persistData.CurrentTerm
 	return

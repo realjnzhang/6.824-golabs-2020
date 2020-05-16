@@ -19,6 +19,8 @@ package raft
 
 import (
 	"golabs/labrpc"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -35,16 +37,18 @@ type Raft struct {
 	me        int                 // this peer's index into peers[]
 
 	// kill signal
-	kill chan bool
+	kill int32
 
 	electionTicker *time.Ticker
 	hearbeatTicker *time.Ticker
 
 	// StateHandlers
-	stateFollower  RaftState
-	stateCandidate RaftState
-	stateLeader    RaftState
-	currentState   RaftState
+	stateHandlers  []RaftState
+	stateFollower  int32
+	stateCandidate int32
+	stateLeader    int32
+	currentState   int32
+	stateLock      *sync.Mutex
 
 	// Persistent state
 	persistData *PersistData
@@ -67,12 +71,14 @@ func NewRaft(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh ch
 	rf.electionTicker = time.NewTicker(electionTimeout * time.Millisecond)
 	rf.hearbeatTicker = time.NewTicker(heartbeatInterval * time.Millisecond)
 
-	rf.stateCandidate = NewRaftCandidate()
-	rf.stateFollower = NewRaftFollower()
-	rf.stateLeader = NewRaftLeader()
+	rf.stateHandlers = []RaftState{NewRaftFollower(), NewRaftCandidate(), NewRaftLeader()}
+	rf.stateFollower = 0
+	rf.stateCandidate = 1
+	rf.stateLeader = 2
 
 	// Raft init to be follower
-	rf.currentState = rf.stateFollower
+	rf.currentState = 0
+	rf.stateLock = new(sync.Mutex)
 
 	// initialize from state persisted before a crash
 	rf.persistData = NewPersistData(persister)
@@ -91,16 +97,19 @@ func NewRaft(peers []*labrpc.ClientEnd, me int, persister *Persister, applyCh ch
 	return rf
 }
 
+func (rf *Raft) currentStateHandler() RaftState {
+	return rf.stateHandlers[atomic.LoadInt32(&rf.currentState)]
+}
+
 func (rf *Raft) heartbeatSignalBridge() {
 	for {
 		select {
-		case k := <-rf.kill:
-			if k {
-				rf.kill <- true
+		case t := <-rf.hearbeatTicker.C:
+			if rf.Killed() {
 				return
 			}
-		case t := <-rf.hearbeatTicker.C:
-			rf.currentState.TimeoutHeartbeat(rf, t)
+			DPrintf("\tsignal heartbeat to [%v] at time [%v]", rf.Me(), t)
+			rf.currentStateHandler().TimeoutHeartbeat(rf, t)
 		}
 	}
 }
@@ -108,13 +117,12 @@ func (rf *Raft) heartbeatSignalBridge() {
 func (rf *Raft) electionSignalBridge() {
 	for {
 		select {
-		case k := <-rf.kill:
-			if k {
-				rf.kill <- true
+		case t := <-rf.electionTicker.C:
+			if rf.Killed() {
 				return
 			}
-		case t := <-rf.electionTicker.C:
-			rf.currentState.TimeoutElection(rf, t)
+			DPrintf("\tsignal election to [%v] at time [%v]", rf.Me(), t)
+			rf.currentStateHandler().TimeoutElection(rf, t)
 		}
 	}
 }
@@ -145,14 +153,11 @@ type RequestVoteReply struct {
 // example RequestVote RPC handler.
 //
 func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
-	if rf.currentState == nil {
-		rf.persistData.RLock()
-		defer rf.persistData.RUnlock()
-		reply.Term = rf.persistData.CurrentTerm
-		reply.VoteGranted = false
+	if rf.Killed() {
 		return
 	}
-	rf.currentState.HandleRV(rf, args, reply)
+	DPrintf("peer[%v] receive requestVote[candidate=%v term=%v]", rf.Me(), args.CandidateId, args.Term)
+	rf.currentStateHandler().HandleRV(rf, args, reply)
 }
 
 type LogEntry struct {
@@ -175,12 +180,10 @@ type AppendEntriesReply struct {
 }
 
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
-	if rf.currentState == nil {
-		rf.persistData.RLock()
-		defer rf.persistData.RUnlock()
-		reply.Success = false
-		reply.Term = rf.persistData.CurrentTerm
+	if rf.Killed() {
 		return
 	}
-	rf.currentState.HandleAE(rf, args, reply)
+	DPrintf("peer[%v] receive appendAntries[leader=%v term=%v]", rf.Me(), args.LeaderId, args.Term)
+	rf.currentStateHandler().HandleAE(rf, args, reply)
+	DPrintf("peer[%v] reply appendAntries[leader=%v term=%v] {%v}", rf.Me(), args.LeaderId, args.Term, *reply)
 }

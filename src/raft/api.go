@@ -2,6 +2,8 @@ package raft
 
 import (
 	"golabs/labrpc"
+	"math/rand"
+	"sync/atomic"
 )
 
 // the apis that Raft should expose to testing framework
@@ -9,7 +11,14 @@ import (
 // return currentTerm and whether this server
 // believes it is the leader.
 func (rf *Raft) GetState() (int, bool) {
-	return rf.persistData.CurrentTerm, rf.currentState == rf.stateLeader
+	persistData := rf.GetPersistData()
+	lockRound := rand.Int()
+	persistData.RLock(rf.me, lockRound)
+	defer persistData.RUnlock(rf.me, lockRound)
+	// rf.lockState()
+	// defer rf.unlockState()
+	DPrintf("API: GetState[%v] currentTerm=%v isLeader=%v is=%v", rf.Me(), persistData.CurrentTerm, atomic.LoadInt32(&rf.currentState) == rf.stateLeader, atomic.LoadInt32(&rf.currentState))
+	return persistData.CurrentTerm, atomic.LoadInt32(&rf.currentState) == rf.stateLeader
 }
 
 //
@@ -44,8 +53,10 @@ type ApplyMsg struct {
 // the leader.
 //
 func (rf *Raft) Start(command interface{}) (int, int, bool) {
+	// rf.lockState()
+	// defer rf.unlockState()
 	DPrintf("API: start peer=%v\n", rf.me)
-	return rf.currentState.HandleCommand(rf, command)
+	return rf.currentStateHandler().HandleCommand(rf, command)
 }
 
 //
@@ -64,8 +75,13 @@ func (rf *Raft) Kill() {
 	rf.electionTicker.Stop()
 	rf.hearbeatTicker.Stop()
 
-	rf.currentState = nil
-	rf.kill <- true
+	// rf.currentState = 0
+	atomic.StoreInt32(&rf.kill, 1)
+	persistData := rf.GetPersistData()
+	lockRound := rand.Int()
+	persistData.Lock(rf.me, lockRound)
+	defer persistData.Unlock(rf.me, lockRound)
+	persistData.RealPersist()
 }
 
 //

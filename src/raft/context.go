@@ -1,5 +1,7 @@
 package raft
 
+import "sync/atomic"
+
 // Raft States's Context
 
 type RaftContext interface {
@@ -12,23 +14,31 @@ type RaftContext interface {
 	SendRequestVote(int, *RequestVoteArgs, *RequestVoteReply) bool
 	SendAppendEntries(int, *AppendEntriesArgs, *AppendEntriesReply) bool
 	Kill()
-	Killed() <-chan bool
+	Killed() bool
 	GetVolatileData() *VolatileData
 }
 
 func (rf *Raft) TransferToFollower() {
-	rf.currentState = rf.stateFollower
-	rf.currentState.InitTransfer(rf)
+	// rf.lockState()
+	// defer rf.unlockState()
+	// rf.currentState = rf.stateFollower
+	atomic.StoreInt32(&rf.currentState, rf.stateFollower)
+	rf.currentStateHandler().InitTransfer(rf)
 }
 
 func (rf *Raft) TransferToCandidate() {
-	rf.currentState = rf.stateCandidate
-	rf.currentState.InitTransfer(rf)
+	// rf.lockState()
+	// defer rf.unlockState()
+	// rf.currentState = rf.stateCandidate
+	atomic.StoreInt32(&rf.currentState, rf.stateCandidate)
+	rf.currentStateHandler().InitTransfer(rf)
 }
 
 func (rf *Raft) TransferToLeader() {
-	rf.currentState = rf.stateLeader
-	rf.currentState.InitTransfer(rf)
+	// rf.lockState()
+	// defer rf.unlockState()
+	atomic.StoreInt32(&rf.currentState, rf.stateLeader)
+	rf.currentStateHandler().InitTransfer(rf)
 }
 
 func (rf *Raft) Peers() int {
@@ -82,8 +92,11 @@ func (rf *Raft) SendAppendEntries(server int, args *AppendEntriesArgs, reply *Ap
 	return ok
 }
 
-func (rf *Raft) Killed() <-chan bool {
-	return rf.kill
+func (rf *Raft) Killed() bool {
+	if atomic.LoadInt32(&rf.kill) != 0 {
+		return true
+	}
+	return false
 }
 
 func (rf *Raft) GetVolatileData() *VolatileData {
