@@ -2,6 +2,7 @@ package raft
 
 import (
 	"math/rand"
+	"runtime"
 	"sync/atomic"
 	"time"
 )
@@ -20,24 +21,14 @@ func (c *RaftCandidate) InitTransfer(context RaftContext) {
 	lockRound := rand.Int()
 	persistData.RLock(context.Me(), lockRound)
 	termSnapshot := persistData.CurrentTerm
+	DPrintf("CANDIDATE[%v] init transfer [term=%v]", context.Me(), termSnapshot)
 	persistData.RUnlock(context.Me(), lockRound)
 	// when first comes to candidate, start an election
 	// r := time.Duration(rand.Float64() * electionTimeout)
 	r := time.Duration(context.Me() * electionTimeout)
 	time.Sleep(r * time.Millisecond)
-	res := make(chan bool)
-	go c.startElection(context, res, termSnapshot)
-	select {
-	case elected := <-res:
-		DPrintf("CANDIDATE[%v] got election result[%v]", context.Me(), elected)
-		if elected {
-			DPrintf("CANDIDATE[%v] is elected and transfer to LEADER", context.Me())
-			context.TransferToLeader()
-		} else {
-			DPrintf("CANDIDATE[%v] is not elected", context.Me())
-		}
-		// else do nothing, still in candidate
-	}
+	// res := make(chan bool)
+	go c.startElection(context, termSnapshot, lockRound)
 }
 
 func (*RaftCandidate) HandleAE(context RaftContext, args *AppendEntriesArgs, reply *AppendEntriesReply) {
@@ -83,30 +74,21 @@ func (c *RaftCandidate) TimeoutElection(context RaftContext, t time.Time) {
 	time.Sleep(r * time.Millisecond)
 	// new round election
 	DPrintf("CANDIDATE[%v] start new round election", context.Me())
-	res := make(chan bool)
-	go c.startElection(context, res, termSnapshot)
-	select {
-	case elected := <-res:
-		if elected {
-			DPrintf("CANDIDATE[%v] is elected and transfer to LEADER", context.Me())
-			context.TransferToLeader()
-		} else {
-			DPrintf("CANDIDATE[%v] is not elected", context.Me())
-		}
-		// else do nothing, still in candidate
-	}
+	// res := make(chan bool)
+	go c.startElection(context, termSnapshot, lockRound)
 }
 
 // private function
-func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool, termSnapshot int) {
+func (c *RaftCandidate) startElection(context RaftContext, termSnapshot, round int) {
 	persistData := context.GetPersistData()
 	var args RequestVoteArgs
 	lockRound := rand.Int()
 	persistData.Lock(context.Me(), lockRound)
+	_, file, line, _ := runtime.Caller(1)
+	DPrintf("CANDIDATE[%v] start election [currTerm=%v termSnapshot=%v] caller=[%v:%v] at round[%v]", context.Me(), persistData.CurrentTerm, termSnapshot, file, line, round)
 	// update persist
 	if persistData.CurrentTerm > termSnapshot { // already finished one round election
 		persistData.Unlock(context.Me(), lockRound)
-		ret <- false
 		return
 	}
 	persistData.CurrentTerm = persistData.CurrentTerm + 1
@@ -163,11 +145,13 @@ func (c *RaftCandidate) startElection(context RaftContext, ret chan<- bool, term
 				vc := atomic.LoadInt32(&voteCount)
 				fin := atomic.LoadInt32(&finished)
 				if int(vc)*2 > context.Peers() {
-					ret <- true
+					DPrintf("CANDIDATE[%v] is elected and transfer to LEADER", context.Me())
+					go context.TransferToLeader()
 					return
 				}
 				if int(fin) >= context.Peers() {
-					ret <- false
+					DPrintf("CANDIDATE[%v] is not elected", context.Me())
+					// else do nothing, still in candidate
 					return
 				}
 			}

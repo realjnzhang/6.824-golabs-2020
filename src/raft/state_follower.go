@@ -124,10 +124,12 @@ func generalAppendEntries(context RaftContext, args *AppendEntriesArgs, reply *A
 	persistData.Lock(context.Me(), lockRound)
 	defer persistData.Unlock(context.Me(), lockRound)
 	defer persistData.Persist()
+	// update current term
+	persistData.CurrentTerm = args.Term
 	// append log
 	log := persistData.Log[:args.PrevLogIndex+1]
 	persistData.Log = append(log, args.Entries...)
-
+	DPrintf("Peer[%v] append AE[len=%v] from LEADER[%v] to log, result log[len=%v]", context.Me(), len(args.Entries), args.LeaderId, len(persistData.Log))
 	// update commit Index
 	volatileData := context.GetVolatileData()
 	volatileData.Lock()
